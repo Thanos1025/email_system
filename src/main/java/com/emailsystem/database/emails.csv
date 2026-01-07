@@ -1,0 +1,3 @@
+"emailId","subject","body","createDate","sentDate","isRead","senderId"
+"0","hi","how are you","2025-11-24T15:45:30.197375675","2025-11-24T15:56:32.203944450","Read","0"
+"1","hi","hsl","2025-11-24T15:56:32.203902126","","Unread","0"

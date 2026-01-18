@@ -26,6 +26,10 @@ public class FolderService {
 		}
 	}
 	
+	public Folder getFolder(int folderId) throws SQLException {
+		return foldersDAO.get(folderId);
+	}
+	
 	public int updateFolder(Folder folder, int folderId) throws SQLException {
 		return foldersDAO.update(folder, folderId);
 	}

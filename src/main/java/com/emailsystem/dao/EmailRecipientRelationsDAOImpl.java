@@ -44,15 +44,15 @@ public class EmailRecipientRelationsDAOImpl implements EmailRecipientRelationsDA
 		return recipients;
 	}
 	 
-	@Override
-	public boolean deleteEmailRecipientRelation(int emailId) throws SQLException {
-		Connection connection = MySqlDbUtil.getConnection();
-		String query = "DELETE from email_recipient_relations WHERE email_id = ?";
-		PreparedStatement pstmt = connection.prepareStatement(query);
-		pstmt.setInt(1, emailId);
-		int affectedRows = pstmt.executeUpdate();
-		connection.close();
-		return affectedRows > 0;
-	}
+//	@Override
+//	public boolean deleteEmailRecipientRelation(int emailId) throws SQLException {
+//		Connection connection = MySqlDbUtil.getConnection();
+//		String query = "DELETE from email_recipient_relations WHERE email_id = ?";
+//		PreparedStatement pstmt = connection.prepareStatement(query);
+//		pstmt.setInt(1, emailId);
+//		int affectedRows = pstmt.executeUpdate();
+//		connection.close();
+//		return affectedRows > 0;
+//	}
 
 }

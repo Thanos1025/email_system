@@ -149,7 +149,15 @@ public class ClientApp {
 			int option = input.nextInt("Enter your options: ");
 			switch (option) {
 			case 1 -> {
-				composeEmailpage(user, folder);
+				List<User> recipients = getRecipients();
+				List<User> ccUsers = getCCUsers();
+				Email email = getEmailObject(user);
+				try {
+					email = emailService.createEmail(email, recipients, ccUsers);
+				} catch (SQLException | EmailAddressAlreadyExistException e) {
+					e.printStackTrace();
+				}
+				sendOrdraftEmailpage(user, folder, email, recipients, ccUsers);
 			}
 			case 2 -> {
 				changeFolder(user);
@@ -184,8 +192,8 @@ public class ClientApp {
 						int emailId = input
 								.nextInt("Enter the index of the email to be selected(type -1 for stop selecting): ");
 						if (emailId != -1) {
-							if (!selectedEmails.contains(emails.get(emailId-1))) {
-								selectedEmails.add(emails.get(emailId-1));
+							if (!selectedEmails.contains(emails.get(emailId - 1))) {
+								selectedEmails.add(emails.get(emailId - 1));
 							} else {
 								throw new EmailAlreadySelectedException("The email is already selected!!");
 							}
@@ -200,7 +208,7 @@ public class ClientApp {
 						System.err.println(e.getMessage());
 					} catch (NoEmailExistException e) {
 						System.err.println(e.getMessage());
-					}catch(Exception e) {
+					} catch (Exception e) {
 						e.printStackTrace();
 					}
 				}
@@ -370,10 +378,12 @@ public class ClientApp {
 				List<Filter> filters = filterService.getFilterByUser(user);
 				List<String> filterHeaders = new LinkedList<>();
 				List<String> filterRows = new LinkedList<>();
-				filterHeaders.add("Filters");
+				filterHeaders.add("Filters" + separator + "Filter applied Folder");
 				int filterSize = 1;
 				for (Filter filter : filters) {
-					filterRows.add(filterSize++ + separator + filter.getFilterName() + separator
+					filterRows.add(filterSize++ + separator
+							+ folderService.getFolder(filter.getFolderId()).getFolderName() + separator
+							+ filter.getFilterName() + separator
 							+ ConditionType.messageFromIndex(filter.getConditionType()) + separator
 							+ "Condition_Count: " + conditionService.getConditionCountByFilterId(filter.getFilterId()));
 				}
@@ -457,7 +467,8 @@ public class ClientApp {
 				List<String> conditionHeaders = new LinkedList<>();
 				List<String> conditionRows = new LinkedList<>();
 				conditionHeaders.add("Sno" + separator + "Conditons in the filter " + filter.getFilterName() + separator
-						+ ConditionType.messageFromIndex(filter.getConditionType()));
+						+ ConditionType.messageFromIndex(filter.getConditionType()) + separator + "Folder Name-"
+						+ folderService.getFolder(filter.getFolderId()).getFolderName());
 				int conditionSize = 1;
 				if (!conditions.isEmpty()) {
 					for (Condition condition : conditions) {
@@ -526,7 +537,7 @@ public class ClientApp {
 						printTable.printBox(folderheaders, folderrows);
 						int folderIndex = input
 								.nextInt("Enter the index of the folder to whicht the filter is apply: ");
-						
+
 						while (folderIndex > folders.size() || folderIndex <= 0) {
 							System.err.println("Please enter a valid folder index ");
 							folderIndex = input
@@ -848,12 +859,7 @@ public class ClientApp {
 		}
 	}
 
-	// compose a new Email
-	static void composeEmailpage(User user, Folder folder) {
-		composeEmailpage(user, folder, "", "");
-	}
-
-	static void composeEmailpage(User user, Folder folder, String addedSubject, String addedBody) {
+	static List<User> getRecipients() {
 		List<User> recipients = new LinkedList<>();
 		boolean askRecipientEmailAddress = true;
 		while (askRecipientEmailAddress) {
@@ -884,37 +890,66 @@ public class ClientApp {
 				}
 			}
 		}
+		return recipients;
+	}
+
+	static List<User> getCCUsers() {
+		List<User> ccUsers = new LinkedList<>();
+		boolean askCCUserEmailAddress = true;
+		while (askCCUserEmailAddress) {
+			String ccUserEmailAddress = input
+					.nextLine("Enter the cc email address(type 'quit' to complete selection): ");
+			if (ccUserEmailAddress.equals("quit")) {
+				System.out.println("There are no cc is selected");
+				askCCUserEmailAddress = false;
+			} else if (!ccUserEmailAddress.isEmpty()) {
+				try {
+					User cc = userService.getUserByEmailAddress(ccUserEmailAddress);
+					for (User user : ccUsers) {
+						if (user.getUserId() == cc.getUserId()) {
+							throw new EmailAddressAlreadyExistException(
+									cc.getEmailAddress() + " is already Selected !!");
+						}
+					}
+					ccUsers.add(cc);
+				} catch (SQLException e) {
+					e.printStackTrace();
+				} catch (NoUserException e) {
+					System.err.println(e.getMessage());
+				} catch (EmailAddressAlreadyExistException e) {
+					System.err.println(e.getMessage());
+				}
+			}
+		}
+		return ccUsers;
+	}
+
+	static Email getEmailObject(User user) {
 		String subject = input.nextLine("Enter the subject of your email: ");
 		String body = input.nextLine("Enter the body of your email: ");
-		Email email = new Email(addedSubject + "\n" + subject, body + "\n" + addedBody, user.getUserId(),
-				LocalDateTime.now());
-		try {
-			email = emailService.createEmail(email, recipients);
-		} catch (SQLException | EmailAddressAlreadyExistException e) {
-			e.printStackTrace();
-		}
-		sendOrdraftpage(user, folder, email, recipients);
+		Email createdEmail = new Email(subject, body, user.getUserId(), LocalDateTime.now());
+		return createdEmail;
 	}
 
 	// options after composing the email
-	static void sendOrdraftpage(User user, Folder folder, Email email, List<User> recipients) {
-		while(true) {
+	static void sendOrdraftEmailpage(User user, Folder folder, Email email, List<User> recipients, List<User> ccs) {
+		while (true) {
 			List<String> headers = new LinkedList<>();
 			List<String> rows = new LinkedList<>();
-	
+
 			headers.add("Options");
 			rows.add("1. Send");
 			rows.add("2. Draft");
 			rows.add("3. Discard");
-	
+
 			printTable.printBox(headers, rows);
-	
+
 			int option = input.nextInt("Enter your option to continue: ");
-	
+
 			switch (option) {
 			case 1 -> {
 				try {
-					emailService.sendEmail(email, recipients);
+					emailService.sendEmail(email, recipients, ccs);
 					System.out.println("Email is sented successfully...");
 				} catch (SQLException e) {
 					e.printStackTrace();
@@ -945,16 +980,60 @@ public class ClientApp {
 		}
 	}
 
+	static void sendOrdraftSubEmailpage(Email parentEmail, Email subEmail, User user, List<User> recipients, List<User> ccs) {
+		while (true) {
+			List<String> headers = new LinkedList<>();
+			List<String> rows = new LinkedList<>();
+
+			headers.add("Options");
+			rows.add("1. Send");
+			rows.add("2. Draft");
+			rows.add("3. Discard");
+
+			printTable.printBox(headers, rows);
+
+			int option = input.nextInt("Enter your option to continue: ");
+
+			switch (option) {
+			case 1 -> {
+				try {
+					emailService.sendSubEmail(parentEmail, subEmail, recipients, ccs);
+					System.out.println("Email is sented successfully...");
+				} catch (SQLException e) {
+					e.printStackTrace();
+				}
+			}
+			case 2 -> {
+				try {
+					emailService.draftSubEmail(parentEmail, subEmail, user);
+					System.out.println("Email is drafted successfully...");
+				} catch (SQLException e) {
+					e.printStackTrace();
+				}
+			}
+			case 3 -> {
+				System.out.println("Email is deleted...");
+			}
+			default -> {
+				System.out.println("Invalid Input");
+				continue;
+			}
+			}
+			return;
+		}
+	}
+
 	static void printEmail(Folder folder, Email email) throws SQLException {
 		User sender = userService.getUserByUserId(email.getSenderId());
-		String recipientsStr = recipientsString(email);
-
+		String recipientsStr = getRecipientsStringByEmail(email);
+		String ccsStr = getCCsStringByEmail(email);
 		List<String> headers = new LinkedList<>();
 		List<String> rows = new LinkedList<>();
 		boolean isSentDateExist = email.getSentDate() != null;
 		headers.add(isSentDateExist ? "Email" : "Draft Email" + separator + " ");
 		rows.add("From: " + separator + sender.getUserName());
 		rows.add("To: " + separator + recipientsStr);
+		rows.add("CC: "+separator+ccsStr);
 		rows.add("Subject: " + separator + email.getSubject());
 		rows.add("Sent Date: " + separator
 				+ (isSentDateExist ? (dateformatter.getLongDateFormat(email.getSentDate())) : "yet to sent"));
@@ -971,17 +1050,26 @@ public class ClientApp {
 		printTable.printBox(bodyheaders, bodyrows, true);
 	}
 
-	static String recipientsString(Email email) throws SQLException {
-		String recipientsStr = "";
+	static String getRecipientsStringByEmail(Email email) throws SQLException {
 		List<User> recipients = emailService.getEmailRecipients(email);
+		List<String> recipientsName = new LinkedList<>();
 		for (User recipient : recipients) {
-			if (recipients.indexOf(recipient) != recipients.size() - 1) {
-				recipientsStr += recipient.getUserName() + ", ";
-			} else {
-				recipientsStr += recipient.getUserName();
-			}
+			recipientsName.add(recipient.getUserName());
 		}
-		return recipientsStr;
+		return String.join(",", recipientsName);
+	}
+	
+	static String getCCsStringByEmail(Email email) throws SQLException {
+		List<User> ccs = emailService.getEmailCCs(email);
+		List<String> ccsName = new LinkedList<>();
+		if(!ccs.isEmpty()) {
+			for(User cc: ccs) {
+				ccsName.add(cc.getUserName());
+			}
+		}else {
+			ccsName.add("There are no ccs");
+		}
+		return String.join(",", ccsName);
 	}
 
 	// Options with opening the normalEmail
@@ -991,8 +1079,51 @@ public class ClientApp {
 			emailService.updateEmail(email, email.getEmailId());
 
 			User sender = userService.getUserByUserId(email.getSenderId());
-			String recipientsStr = recipientsString(email);
+			String recipientsStr = getRecipientsStringByEmail(email);
 			printEmail(folder, email);
+
+			List<String> subEmailHeaders = new LinkedList<>();
+			List<String> subEmailRows = new LinkedList<>();
+
+			subEmailHeaders.add("SNo" + separator + "Sub Emails");
+			List<Email> subEmails = emailService.getSubEmailsByEmail(email, user);
+			Email lastSubEmail = email;
+			if (!subEmails.isEmpty()) {
+				for (Email subEmail : subEmails) {
+					
+					String subBody = subEmail.getSubject() + "-" + subEmail.getBody();
+					subBody = subBody.length() > 40 ? subBody.substring(0, 40) + "..." : subBody;
+					boolean isSentDateExist = subEmail.getSentDate() != null;
+
+					// Sent Email
+					if ((subEmail.getSenderId() == user.getUserId()) && isSentDateExist) {
+						subEmailRows.add((subEmails.indexOf(subEmail) + 1) + separator + "To: "
+								+getRecipientsStringByEmail(subEmail) + separator + subEmail.getSubject() + " - "
+								+ subBody + separator + dateformatter.getShortDateFormat(subEmail.getSentDate())
+								+ separator + folderService.getStringIsRead(folder, subEmail));
+					}
+
+					// Draft Email
+					else if (email.getSenderId() == user.getUserId() && subEmail.getSentDate() == null) {
+						subEmailRows.add((subEmails.indexOf(subEmail) + 1) + separator + "Draft" + separator
+								+ email.getSubject() + " - " + subBody + separator + "yet to sent");
+					}
+
+					// Email
+					else {
+						User subEmailSender = userService.getUserByUserId(subEmail.getSenderId());
+						subEmailRows.add((subEmails.indexOf(subEmail) + 1) + separator + subEmailSender.getUserName()
+								+ separator + subEmail.getSubject() + " - " + subBody + separator
+								+ dateformatter.getShortDateFormat(subEmail.getSentDate()) + separator
+								+ folderService.getStringIsRead(folder, subEmail));
+					}
+				}
+				printTable.printBox(subEmailHeaders, subEmailRows);
+				if(!subEmails.isEmpty()) {
+					lastSubEmail = subEmails.get(subEmails.size() - 1);
+				}
+			}
+			
 
 //		System.out.println("Body: \n\n"+email.getBody());
 //		"\nWould you want to \n1.Reply \n2.Forward \n3.Delete \n4.Mark as Unread \n5.Exit"
@@ -1006,22 +1137,69 @@ public class ClientApp {
 			emailOptionRows.add("5. Exit");
 
 			printTable.printBox(emailOptionHeaders, emailOptionRows);
-
 			int option = input.nextInt("Enter your option: ");
 			switch (option) {
 			case 1 -> {
+				if (lastSubEmail.getSentDate() == null) {
+					int sentOrDiscard = input.nextInt("Do you want to \n 1.Sent Or 2.Discard the last draft email");
+					switch(sentOrDiscard) {
+					case 1->{
+						emailService.sendSubEmail(email, lastSubEmail, emailService.getEmailRecipients(lastSubEmail), emailService.getEmailCCs(lastSubEmail));
+						System.out.println("The last email is sented successfully...");
+					}
+					case 2->{
+						emailService.deleteSubEmail(email, lastSubEmail, user);
+						System.out.println("Email is deleted...");
+					}
+					}
+				}
 				String replyEmailBody = "\n================ Reply Message ================\n" + "---- On, "
-						+ dateformatter.getLongDateFormatwithOutTimeAgo(email.getSentDate()) + " "
-						+ sender.getEmailAddress() + " wrote ----\n" + email.getBody()
+						+ dateformatter.getLongDateFormatwithOutTimeAgo(lastSubEmail.getSentDate()) + " "
+						+ sender.getEmailAddress() + " wrote ----\n" + lastSubEmail.getBody()
 						+ "\n================= Reply Message =================\n";
-				composeEmailpage(user, folder, "Re: " + email.getSubject(), replyEmailBody);
+				// composeEmailpage(user, folder, "Re: " + email.getSubject(), replyEmailBody);
+				List<User> recipients = getRecipients();
+				List<User> ccs = getCCUsers();
+				Email replyEmail = getEmailObject(user);
+				replyEmail.setSubject("Re: " + replyEmail.getSubject()+" To "+lastSubEmail.getSubject());
+				replyEmail.setBody(replyEmail.getBody() + "\n" + replyEmailBody);
+				try {
+					replyEmail = emailService.createEmail(replyEmail, recipients, ccs);
+				} catch (EmailAddressAlreadyExistException e) {
+					e.printStackTrace();
+				}
+				sendOrdraftSubEmailpage(email, replyEmail, user, recipients, ccs);
 			}
 			case 2 -> {
+				if (lastSubEmail.getSentDate() == null) {
+					int sentOrDiscard = input.nextInt("Do you want to \n 1.Sent Or 2.Discard the last draft email");
+					switch(sentOrDiscard) {
+					case 1->{
+						emailService.sendSubEmail(email, lastSubEmail, emailService.getEmailRecipients(lastSubEmail), emailService.getEmailCCs(lastSubEmail));
+						System.out.println("The last email is sented successfully...");
+					}
+					case 2->{
+						emailService.deleteSubEmail(email, lastSubEmail, user);
+						System.out.println("Email is deleted...");
+					}
+					}
+				}
 				String forwardEmailBody = "\n============== Forwarded Message ==============\nFrom: "
 						+ sender.getEmailAddress() + "\nTo: " + recipientsStr + "\nDate: "
-						+ dateformatter.getLongDateFormatwithOutTimeAgo(email.getSentDate()) + "\nBody: \n"
-						+ email.getBody() + "\n============== Forwarded Message ==============";
-				composeEmailpage(user, folder, "Fwd: " + email.getSubject(), forwardEmailBody);
+						+ dateformatter.getLongDateFormatwithOutTimeAgo(lastSubEmail.getSentDate()) + "\nBody: \n"
+						+ lastSubEmail.getBody() + "\n============== Forwarded Message ==============";
+				List<User> recipients = getRecipients();
+				List<User> ccs = getCCUsers();
+				Email forwardEmail = getEmailObject(user);
+				forwardEmail.setSubject("Fwd: "+forwardEmail.getSubject()+" of "+ lastSubEmail.getSubject());
+				forwardEmail.setBody(forwardEmail.getBody() + "\n" + forwardEmailBody);
+				try {
+					forwardEmail = emailService.createEmail(forwardEmail, recipients, ccs);
+				} catch (EmailAddressAlreadyExistException e) {
+					// TODO Auto-generated catch block
+					e.printStackTrace();
+				}
+				sendOrdraftSubEmailpage(email, forwardEmail, user, recipients, ccs);
 			}
 			case 3 -> {
 				String yesOrno = input.nextLine("Are you sure you want to move this email to Trash?(y/n)");
@@ -1066,6 +1244,7 @@ public class ClientApp {
 				printEmail(folder, email);
 
 				List<User> recipients = emailService.getEmailRecipients(email);
+				List<User> ccs = emailService.getEmailCCs(email);
 				List<String> emailOptionHeaders = new LinkedList<>();
 				List<String> emailOptionRows = new LinkedList<>();
 				emailOptionHeaders.add("Options with Draft email");
@@ -1078,7 +1257,7 @@ public class ClientApp {
 				int option = input.nextInt("Enter your option: ");
 				switch (option) {
 				case 1 -> {
-					emailService.sendDraftEmail(folder, email, recipients);
+					emailService.sendDraftEmail(folder, email, recipients, ccs);
 					System.out.println("Email is sented successfully...");
 					return;
 				}
@@ -1151,68 +1330,65 @@ public class ClientApp {
 	}
 
 	static void optionsWithMultipleEmails(User user, Folder folder, List<Email> selectedEmails) {
-			try {
-				List<String> headers = new LinkedList<>();
-				List<String> rows = new LinkedList<>();
-				headers.add("Options");
-				rows.add("1. Delete");
-				rows.add("2. Move");
-				rows.add("3. Mark as Unread");
-				rows.add("4. Exit");
+		try {
+			List<String> headers = new LinkedList<>();
+			List<String> rows = new LinkedList<>();
+			headers.add("Options");
+			rows.add("1. Delete");
+			rows.add("2. Move");
+			rows.add("3. Mark as Unread");
+			rows.add("4. Exit");
 
-				printTable.printBox(headers, rows);
+			printTable.printBox(headers, rows);
 
-				int option = input.nextInt("Enter your option: ");
-				switch (option) {
-				case 1 -> {
-					String confirmDelete = input
-							.nextLine("Are you sure you want to move these emails to Trash?(y/n): ");
-					if (confirmDelete.toLowerCase().equals("y")) {
-						emailService.trashMultipleEmails(user, folder, selectedEmails);
-						System.out.println("All emails are move to trash...");
-					} else {
-						System.out.println("All emails are not deleted..");
-					}
+			int option = input.nextInt("Enter your option: ");
+			switch (option) {
+			case 1 -> {
+				String confirmDelete = input.nextLine("Are you sure you want to move these emails to Trash?(y/n): ");
+				if (confirmDelete.toLowerCase().equals("y")) {
+					emailService.trashMultipleEmails(user, folder, selectedEmails);
+					System.out.println("All emails are move to trash...");
+				} else {
+					System.out.println("All emails are not deleted..");
 				}
-				case 2 -> {
-					List<String> folderheaders = new LinkedList<>();
-					List<String> folderrows = new LinkedList<>();
-					List<Folder> folders = userService.getFoldersByUserId(user.getUserId());
-					int count = 1;
-					for (Folder selectingfolder : folders) {
-						folderrows.add((count++) + ". " + selectingfolder.getFolderName());
-					}
-					printTable.printBox(folderheaders, folderrows);
-					int folderIndex = input
-							.nextInt("Enter the index of the folder: ");
-					while (folderIndex > folders.size() || folderIndex <= 0) {
-						System.err.println("Please enter a valid folder index ");
-						folderIndex = input
-								.nextInt("Enter the index of the folder: ");
-					}
-					Folder selectedfolder = folders.get(folderIndex - 1);
-					emailService.moveEmail(folder, selectedfolder, selectedEmails);
-					System.out.println("All the emails are moved to the "+selectedfolder.getFolderName()+" folder");
-				}
-				case 3 -> {
-					for(Email email: selectedEmails) {
-						folderService.updateIsRead(folder, email, false);
-					}
-					System.out.println("All emails are marked as unread");
-				}
-				case 4 -> {
-					System.out.println("Exiting options...");
-					return;
-				}
-				default -> {
-
-				}
-				}
-			} catch (SQLException e) {
-				// TODO Auto-generated catch block
-				e.printStackTrace();
 			}
+			case 2 -> {
+				List<String> folderheaders = new LinkedList<>();
+				List<String> folderrows = new LinkedList<>();
+				List<Folder> folders = userService.getFoldersByUserId(user.getUserId());
+				int count = 1;
+				for (Folder selectingfolder : folders) {
+					folderrows.add((count++) + ". " + selectingfolder.getFolderName());
+				}
+				printTable.printBox(folderheaders, folderrows);
+				int folderIndex = input.nextInt("Enter the index of the folder: ");
+				while (folderIndex > folders.size() || folderIndex <= 0) {
+					System.err.println("Please enter a valid folder index ");
+					folderIndex = input.nextInt("Enter the index of the folder: ");
+				}
+				Folder selectedfolder = folders.get(folderIndex - 1);
+				emailService.moveEmail(folder, selectedfolder, selectedEmails);
+				System.out.println("All the emails are moved to the " + selectedfolder.getFolderName() + " folder");
+			}
+			case 3 -> {
+				for (Email email : selectedEmails) {
+					folderService.updateIsRead(folder, email, false);
+				}
+				System.out.println("All emails are marked as unread");
+			}
+			case 4 -> {
+				System.out.println("Exiting options...");
+				return;
+			}
+			default -> {
+
+			}
+			}
+		} catch (SQLException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
 		}
+	}
 
 	// print the emails inside the folder
 	static List<Email> printEmailsByFolder(User user, Folder folder) {
@@ -1237,15 +1413,23 @@ public class ClientApp {
 					String subBody = email.getSubject() + "-" + email.getBody();
 					subBody = subBody.length() > 40 ? subBody.substring(0, 40) + "..." : subBody;
 					boolean isSentDateExist = email.getSentDate() != null;
+
+					// Sent Email
 					if ((email.getSenderId() == user.getUserId()) && isSentDateExist) {
 						folderRows.add((emails.indexOf(email) + 1) + separator + "To: " + recipientsStr + separator
 								+ email.getSubject() + " - " + subBody + separator
 								+ dateformatter.getShortDateFormat(email.getSentDate()) + separator
 								+ folderService.getStringIsRead(folder, email));
-					} else if (email.getSenderId() == user.getUserId()) {
+					}
+
+					// Draft Email
+					else if (email.getSenderId() == user.getUserId() && email.getSentDate() == null) {
 						folderRows.add((emails.indexOf(email) + 1) + separator + "Draft" + separator
 								+ email.getSubject() + " - " + subBody + separator + "yet to sent");
-					} else {
+					}
+
+					// Email
+					else {
 						User sender = userService.getUserByUserId(email.getSenderId());
 						folderRows.add((emails.indexOf(email) + 1) + separator + sender.getUserName() + separator
 								+ email.getSubject() + " - " + subBody + separator

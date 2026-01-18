@@ -33,13 +33,13 @@ public class FoldersDAOImpl implements FoldersDAO{
 	@Override
 	public Folder get(int findfolderId) throws SQLException {
 		Connection connection = MySqlDbUtil.getConnection();
-		String query = "SELECT * FROM folders WHERE folderId = ?";
+		String query = "SELECT * FROM folders WHERE folder_id = ?";
 		PreparedStatement pstmt = connection.prepareStatement(query);
 		pstmt.setInt(1, findfolderId);
 		ResultSet rs = pstmt.executeQuery();
 		Folder folder = null;
 		while(rs.next()) {
-			int folderId = rs.getInt("folder_idd");
+			int folderId = rs.getInt("folder_id");
 			String folderName = rs.getString("folder_name");
 			Boolean isDefaultFolder = rs.getBoolean("is_default_folder");
 			folder = new Folder(folderId, folderName, isDefaultFolder);
